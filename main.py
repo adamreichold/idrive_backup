@@ -177,6 +177,8 @@ def run_backup():
                     upload_files(files)
             elif include.is_dir():
                 includes.extend(include.iterdir())
+            else:
+                logfile.write('Skipping path {} as it is neither a file nor a directory...\n'.format(include))
 
     if len(files) > 0:
         upload_files(files)
