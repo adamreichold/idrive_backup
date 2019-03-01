@@ -166,7 +166,10 @@ def run_backup():
     files = list()
 
     while len(includes) > 0:
-        include = includes.pop().resolve()
+        try:
+          include = includes.pop().resolve()
+        except FileNotFoundError:
+            logfile.write('Skipping path {} as it appears to be a broken symbolic link...\n'.format(include))
 
         for exclude in excludes:
             if exclude == include or exclude in include.parents:
@@ -179,7 +182,10 @@ def run_backup():
                 if len(files) == 1000:
                     upload_files(files)
             elif include.is_dir():
-                includes.extend(include.iterdir())
+                try:
+                    includes.extend(include.iterdir())
+                except FileNotFoundError:
+                    logfile.write('Skipping path {} as it was removed while the backup was running...\n'.format(include))
             else:
                 logfile.write('Skipping path {} as it is neither a file nor a directory...\n'.format(include))
 
