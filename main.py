@@ -30,6 +30,9 @@ with configpath.open(mode='rt', encoding='utf-8') as configfile:
 if not logdir.is_dir():
     logdir.mkdir()
 
+# Time to connect to the local network
+time.sleep(300)
+
 if not utilpath.is_file():
     print('Downloading idevsutil_dedup binary...')
     out = subprocess.check_output(['curl', 'https://www.idrivedownloads.com/downloads/linux/download-options/IDrive_linux_64bit.zip'])
