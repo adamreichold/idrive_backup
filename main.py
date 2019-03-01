@@ -24,7 +24,8 @@ configpath = scriptdir / 'config.yaml'
 lastrunpath = scriptdir / 'lastrun'
 utilpath = scriptdir / 'idevsutil_dedup'
 
-config = yaml.safe_load(configpath.read_text(encoding='utf-8'))
+with configpath.open(mode='rt', encoding='utf-8') as configfile:
+    config = yaml.safe_load(configfile)
 
 if not logdir.is_dir():
     logdir.mkdir()
@@ -48,8 +49,9 @@ def run_util(*args):
             keyfile.write(config['encryption_key'])
             keyfile.flush()
 
-            cmd = [utilpath, '--password-file=' + passfile.name, '--pvt-key=' + keyfile.name, *args]
-            return subprocess.check_output(cmd, encoding='utf-8')
+            cmd = [str(utilpath), '--password-file=' + passfile.name, '--pvt-key=' + keyfile.name]
+            cmd.extend(args)
+            return subprocess.check_output(cmd).decode('utf-8')
 
 
 def run_util_tree(*args):
@@ -150,7 +152,8 @@ def run_backup():
 
     starttime = datetime.now()
 
-    logfile = open(logdir / '{:%Y-%m-%dT%H:%M:%S}.log'.format(starttime), 'w+t', buffering=1, encoding='utf-8')
+    logpath = logdir / '{:%Y-%m-%dT%H:%M:%S}.log'.format(starttime)
+    logfile = logpath.open('wt', buffering=1, encoding='utf-8')
     files_considered_for_backup = 0
     files_backed_up_now = 0
     files_already_present = 0
@@ -227,7 +230,8 @@ Quota used: {quota_used} GB out of {quota_total} GB
 
 while True:
     try:
-        lastrun = datetime.fromtimestamp(float(lastrunpath.read_text()))
+        with lastrunpath.open(mode='rt', encoding='ascii') as lastrunfile:
+            lastrun = datetime.fromtimestamp(float(lastrunfile.read()))
     except FileNotFoundError:
         lastrun = None
 
@@ -238,7 +242,8 @@ while True:
         time.sleep(300)
         continue
 
-    lastrunpath.write_text(str(now.timestamp()))
+    with lastrunpath.open(mode='wt', encoding='ascii') as lastrunfile:
+        lastrunfile.write(str(now.timestamp()))
 
     try:
         print('Starting backup on {:%c}...'.format(now))
