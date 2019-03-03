@@ -208,14 +208,16 @@ def run_backup():
 
     summary = """
 Summary:
+Machine: {device_name} ({hostname})
 Backup start time: {starttime:%c}
-Backup end time : {endtime:%c}
+Backup end time: {endtime:%c}
 Files considered for backup: {files_considered_for_backup}
 Files backed up now: {files_backed_up_now}
 Files already present in your account: {files_already_present}
 Files failed to backup: {files_failed_to_backup}
 Quota used: {quota_used} GB out of {quota_total} GB
 """.format(
+        device_name=config['device_name'], hostname=socket.gethostname(),
         starttime=starttime, endtime=endtime,
         files_considered_for_backup=files_considered_for_backup,
         files_backed_up_now=files_backed_up_now,
