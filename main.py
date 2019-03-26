@@ -240,6 +240,22 @@ Quota used: {quota_used} GB out of {quota_total} GB
     subprocess.check_call(['curl', '-s', '-d', data, 'https://webdav.ibackup.com/cgi-bin/Notify_email_ibl'], stdout=subprocess.DEVNULL)
 
 
+def archive_logs():
+    deadline = datetime.now() - timedelta(days=7)
+
+    with zipfile.ZipFile(str(logdir / 'archived.zip'), mode='a', compression=zipfile.ZIP_DEFLATED) as archive:
+        for logfile in logdir.iterdir():
+            if logfile.suffix != '.log':
+                continue
+
+            if deadline < datetime.strptime(logfile.stem, '%Y-%m-%dT%H:%M:%S'):
+                continue
+
+            print('Archiving log file `{}`...'.format(logfile.name))
+            archive.write(str(logfile), arcname=logfile.name)
+            logfile.unlink()
+
+
 while True:
     try:
         with lastrunpath.open(mode='rt', encoding='ascii') as lastrunfile:
@@ -263,3 +279,5 @@ while True:
         print('Completed backup on {:%c}.'.format(datetime.now()))
     except Exception as exception:
         print('Backup failed due to {}: {}'.format(type(exception).__name__, exception))
+
+    archive_logs()
