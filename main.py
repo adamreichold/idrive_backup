@@ -52,9 +52,10 @@ def run_util(*args):
             keyfile.write(config['encryption_key'])
             keyfile.flush()
 
-            cmd = [str(utilpath), '--password-file=' + passfile.name, '--pvt-key=' + keyfile.name]
-            cmd.extend(args)
-            return subprocess.check_output(cmd).decode('utf-8')
+            with tempfile.TemporaryDirectory() as tempdir:
+                cmd = [str(utilpath), '--password-file=' + passfile.name, '--pvt-key=' + keyfile.name, '--temp=' + tempdir]
+                cmd.extend(args)
+                return subprocess.check_output(cmd).decode('utf-8')
 
 
 def run_util_tree(*args):
