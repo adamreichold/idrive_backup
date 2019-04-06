@@ -1,4 +1,8 @@
 idevsutil_dedup
 config.yaml
 lastrun
+main
+main.log
 logs/
+target/
+Cargo.lock
