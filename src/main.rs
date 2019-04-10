@@ -20,7 +20,7 @@ use serde::de::DeserializeOwned;
 use serde_derive::Deserialize;
 use serde_xml_rs::from_str as from_xml_str;
 use serde_yaml::from_reader as from_yaml_reader;
-use simplelog::{LevelFilter, SharedLogger, WriteLogger};
+use simplelog::{Config as LogConfig, LevelFilter, SharedLogger, WriteLogger};
 use tempfile::{NamedTempFile, TempDir};
 
 #[derive(Deserialize)]
@@ -555,7 +555,10 @@ fn main() {
 
     WriteLogger::init(
         LevelFilter::Info,
-        Default::default(),
+        LogConfig {
+            time_format: Some("%F %T"),
+            ..Default::default()
+        },
         OpenOptions::new()
             .create(true)
             .append(true)
