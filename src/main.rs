@@ -189,7 +189,9 @@ fn get_device_id(config: &Config, srv_ip: &str) -> Result<String, Error> {
         nick_name: String,
     }
 
-    for device in parse_items::<Device>(output)? {
+    let devices = parse_items::<Device>(output)?;
+
+    for device in devices {
         if device.nick_name == config.device_name {
             return Ok(format!("5c0b{}4b5z", device.device_id));
         }
@@ -279,7 +281,9 @@ where
 
     let mut last_total_transfer_size = 0;
 
-    for transfer in parse_items::<Transfer>(output)? {
+    let transfers = parse_items::<Transfer>(output)?;
+
+    for transfer in transfers {
         if transfer.percentage != "100%" {
             continue;
         }
