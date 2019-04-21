@@ -4,15 +4,11 @@ version = "0.1.0"
 authors = ["Adam Reichold <adam.reichold@t-online.de>"]
 edition = "2018"
 
-[[bin]]
-name = "main"
-path = "src/main.rs"
-
 [dependencies]
 failure = "0.1"
 log = "0.4"
 simplelog = "0.5"
-humantime = "1.2"
+chrono = "0.4"
 tempfile = "3.0"
 serde = "1.0"
 serde_derive = "1.0"

@@ -1,0 +1,8 @@
+[Unit]
+Description=IDrive backup service
+
+[Service]
+ExecStart=%h/bin/idrive_backup/idrive_backup
+WorkingDirectory=%h/bin/idrive_backup
+Restart=on-failure
+RestartSec=300
