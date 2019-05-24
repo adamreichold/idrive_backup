@@ -1,5 +1,6 @@
 mod backup;
 mod clean;
+mod restore;
 
 use std::env::args;
 use std::ffi::{OsStr, OsString};
@@ -8,7 +9,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use failure::{bail, Error, ResultExt, SyncFailure};
+use failure::{bail, Fallible, ResultExt, SyncFailure};
 use log::warn;
 use serde::de::DeserializeOwned;
 use serde_derive::Deserialize;
@@ -19,8 +20,9 @@ use tempfile::{NamedTempFile, TempDir};
 
 use self::backup::backup;
 use self::clean::clean;
+use self::restore::restore;
 
-fn main() -> Result<(), Error> {
+fn main() -> Fallible<()> {
     SimpleLogger::init(
         LevelFilter::Info,
         LogConfig {
@@ -37,8 +39,15 @@ fn main() -> Result<(), Error> {
     let srv_ip = get_server_ip(&config).context("Failed to determine server IP")?;
     let dev_id = get_device_id(&config, &srv_ip).context("Failed to determine device ID")?;
 
-    match args().nth(1).as_ref().map(String::as_str) {
+    let args = args().collect::<Vec<_>>();
+
+    match args.get(1).map(String::as_str) {
         None | Some("backup") => backup(&config, &srv_ip, &dev_id),
+        Some("restore") => {
+            let dir = Path::new(args.get(2).map(String::as_str).unwrap_or("restored_files"));
+
+            restore(&config, &srv_ip, &dev_id, dir)
+        }
         Some("clean") => clean(&config, &srv_ip, &dev_id),
         Some(arg) => bail!("Unsupported mode: {}", arg),
     }
@@ -55,14 +64,14 @@ pub struct Config {
     excludes: Vec<PathBuf>,
 }
 
-fn read_config() -> Result<Config, Error> {
+fn read_config() -> Fallible<Config> {
     let config_file = File::open("config.yaml")?;
     let config = from_yaml_reader(config_file)?;
 
     Ok(config)
 }
 
-fn download_util() -> Result<(), Error> {
+fn download_util() -> Fallible<()> {
     if Path::new("idevsutil_dedup").exists() {
         return Ok(());
     }
@@ -95,7 +104,7 @@ fn download_util() -> Result<(), Error> {
     Ok(())
 }
 
-fn run_util<I, S>(config: &Config, args: I) -> Result<String, Error>
+fn run_util<I, S>(config: &Config, args: I) -> Fallible<String>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
@@ -126,7 +135,7 @@ where
     Ok(String::from_utf8(output.stdout)?)
 }
 
-fn parse_tree<T: DeserializeOwned>(output: String) -> Result<T, Error> {
+fn parse_tree<T: DeserializeOwned>(output: String) -> Fallible<T> {
     let tree = if let Some(pos) = output.find("<tree") {
         &output[pos..]
     } else {
@@ -136,7 +145,7 @@ fn parse_tree<T: DeserializeOwned>(output: String) -> Result<T, Error> {
     Ok(from_xml_str(tree).map_err(SyncFailure::new)?)
 }
 
-fn parse_items<T: DeserializeOwned>(output: String) -> Result<Vec<T>, Error> {
+fn parse_items<T: DeserializeOwned>(output: String) -> Fallible<Vec<T>> {
     let mut items = Vec::new();
 
     for line in output.lines() {
@@ -148,7 +157,7 @@ fn parse_items<T: DeserializeOwned>(output: String) -> Result<Vec<T>, Error> {
     Ok(items)
 }
 
-fn get_server_ip(config: &Config) -> Result<String, Error> {
+fn get_server_ip(config: &Config) -> Fallible<String> {
     let output = run_util(&config, &["--getServerAddress", &config.username])?;
 
     #[derive(Deserialize)]
@@ -163,7 +172,7 @@ fn get_server_ip(config: &Config) -> Result<String, Error> {
     Ok(srv_ip.val)
 }
 
-fn get_device_id(config: &Config, srv_ip: &str) -> Result<String, Error> {
+fn get_device_id(config: &Config, srv_ip: &str) -> Fallible<String> {
     let output = run_util(
         &config,
         &[
@@ -190,7 +199,7 @@ fn get_device_id(config: &Config, srv_ip: &str) -> Result<String, Error> {
     bail!("Failed to resolve device ID");
 }
 
-fn get_quota(config: &Config, srv_ip: &str) -> Result<(u64, u64), Error> {
+fn get_quota(config: &Config, srv_ip: &str) -> Fallible<(u64, u64)> {
     let output = run_util(
         &config,
         &[
@@ -213,6 +222,46 @@ fn get_quota(config: &Config, srv_ip: &str) -> Result<(u64, u64), Error> {
     Ok((quota.used, quota.total))
 }
 
+fn list_dir(
+    config: &Config,
+    srv_ip: &str,
+    dev_id: &str,
+    dir: &Path,
+) -> Fallible<impl Iterator<Item = (PathBuf, bool)>> {
+    let output = run_util(
+        &config,
+        &[
+            OsStr::new("--auth-list"),
+            OsStr::new("--xml-output"),
+            &make_arg("--device-id=", dev_id),
+            &make_arg(&format!("{}@{}::home", config.username, srv_ip), dir),
+        ],
+    )?;
+
+    #[derive(Deserialize)]
+    #[serde(rename = "item")]
+    struct Resource {
+        #[serde(rename = "restype")]
+        type_: char,
+        #[serde(rename = "fname")]
+        name: PathBuf,
+    }
+
+    let resources = parse_items::<Resource>(output)?;
+
+    Ok(resources
+        .into_iter()
+        .filter_map(|resource| match resource.type_ {
+            'D' => Some((resource.name, true)),
+            'F' => Some((resource.name, false)),
+            type_ => {
+                warn!("Skipping unknown resource type: {}", type_);
+
+                None
+            }
+        }))
+}
+
 fn make_arg<S: AsRef<OsStr>>(pre: &str, val: S) -> OsString {
     let mut arg = OsString::new();
     arg.push(pre);
@@ -220,8 +269,31 @@ fn make_arg<S: AsRef<OsStr>>(pre: &str, val: S) -> OsString {
     arg
 }
 
-fn get_hostname() -> Result<String, Error> {
+fn get_hostname() -> Fallible<String> {
     let mut hostname = String::from_utf8(Command::new("hostname").output()?.stdout)?;
     hostname.pop();
     Ok(hostname)
+}
+
+#[allow(clippy::useless_let_if_seq)]
+fn format_size(size: u64) -> (f64, &'static str) {
+    let mut size = size as f64;
+    let mut unit = "B";
+
+    if size > 1024.0 {
+        size /= 1024.0;
+        unit = "kB";
+    }
+
+    if size > 1024.0 {
+        size /= 1024.0;
+        unit = "MB";
+    }
+
+    if size > 1024.0 {
+        size /= 1024.0;
+        unit = "GB";
+    }
+
+    (size, unit)
 }

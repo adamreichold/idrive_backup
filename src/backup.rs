@@ -5,14 +5,14 @@ use std::path::Path;
 use std::process::{Command, Stdio};
 
 use chrono::{offset::Local, DateTime};
-use failure::{Error, ResultExt};
+use failure::{Fallible, ResultExt};
 use log::{error, info, warn};
 use serde_derive::Deserialize;
 use tempfile::NamedTempFile;
 
-use super::{get_hostname, get_quota, make_arg, parse_items, run_util, Config};
+use super::{format_size, get_hostname, get_quota, make_arg, parse_items, run_util, Config};
 
-pub fn backup(config: &Config, srv_ip: &str, dev_id: &str) -> Result<(), Error> {
+pub fn backup(config: &Config, srv_ip: &str, dev_id: &str) -> Fallible<()> {
     info!(
         "Starting backup from {} to {} ({}) at {}...",
         get_hostname()?,
@@ -59,6 +59,7 @@ pub fn backup(config: &Config, srv_ip: &str, dev_id: &str) -> Result<(), Error> 
             if files.len() == 1000 {
                 upload_files(config, srv_ip, dev_id, &mut stats, &files)
                     .context("Failed to upload files")?;
+
                 files.clear();
             }
         } else if path.is_dir() {
@@ -134,7 +135,7 @@ fn upload_files<I, P>(
     dev_id: &str,
     stats: &mut Stats,
     files: I,
-) -> Result<(), Error>
+) -> Fallible<()>
 where
     I: IntoIterator<Item = P>,
     P: AsRef<Path>,
@@ -226,7 +227,7 @@ fn mail_summary(
     starttime: &DateTime<Local>,
     endtime: &DateTime<Local>,
     stats: &Stats,
-) -> Result<(), Error> {
+) -> Fallible<()> {
     let (quota_used, quota_total) = get_quota(config, srv_ip).context("Failed to get quota")?;
 
     let summary = format!(
@@ -282,27 +283,4 @@ Quota used: {quota_used} GB out of {quota_total} GB"#,
     }
 
     Ok(())
-}
-
-#[allow(clippy::useless_let_if_seq)]
-fn format_size(size: u64) -> (f64, &'static str) {
-    let mut size = size as f64;
-    let mut unit = "B";
-
-    if size > 1024.0 {
-        size /= 1024.0;
-        unit = "kB";
-    }
-
-    if size > 1024.0 {
-        size /= 1024.0;
-        unit = "MB";
-    }
-
-    if size > 1024.0 {
-        size /= 1024.0;
-        unit = "GB";
-    }
-
-    (size, unit)
 }

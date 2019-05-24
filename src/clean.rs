@@ -3,43 +3,36 @@ use std::io::{BufWriter, Write};
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 
-use failure::{bail, Error, ResultExt};
+use failure::{bail, Fallible, ResultExt};
 use log::{info, warn};
 use serde_derive::Deserialize;
 use tempfile::NamedTempFile;
 
-use super::{make_arg, parse_items, run_util, Config};
+use super::{list_dir, make_arg, parse_items, run_util, Config};
 
-pub fn clean(config: &Config, srv_ip: &str, dev_id: &str) -> Result<(), Error> {
+pub fn clean(config: &Config, srv_ip: &str, dev_id: &str) -> Fallible<()> {
     info!(
         "Cleaning archive of {} ({}) at {}...",
         config.device_name, dev_id, srv_ip
     );
 
-    let mut paths = vec![PathBuf::from("/")];
     let mut items = Vec::new();
 
-    while let Some(path) = paths.pop() {
-        for entry in list_folder(config, srv_ip, dev_id, &path)? {
-            let entry_path = path.join(entry.name());
+    walk_dir(config, srv_ip, dev_id, Path::new("/"), |path| {
+        if exists_and_not_excluded(config, &path) {
+            Ok(Some(path))
+        } else {
+            items.push(path);
 
-            if !test_path(config, &entry_path) {
-                items.push(entry_path);
+            if items.len() == 100 {
+                delete_items(config, srv_ip, dev_id, &items).context("Failed to delete items")?;
 
-                if items.len() == 100 {
-                    delete_items(config, srv_ip, dev_id, &items)
-                        .context("Failed to delete items")?;
-                    items.clear()
-                }
-
-                continue;
+                items.clear()
             }
 
-            if let Entry::Dir(_) = entry {
-                paths.push(entry_path);
-            }
+            Ok(None)
         }
-    }
+    })?;
 
     if !items.is_empty() {
         delete_items(config, srv_ip, dev_id, &items).context("Failed to delete items")?;
@@ -48,22 +41,7 @@ pub fn clean(config: &Config, srv_ip: &str, dev_id: &str) -> Result<(), Error> {
     Ok(())
 }
 
-#[derive(Debug)]
-enum Entry {
-    Dir(PathBuf),
-    File(PathBuf),
-}
-
-impl Entry {
-    fn name(&self) -> &Path {
-        match self {
-            Entry::Dir(name) => name,
-            Entry::File(name) => name,
-        }
-    }
-}
-
-fn test_path(config: &Config, path: &Path) -> bool {
+fn exists_and_not_excluded(config: &Config, path: &Path) -> bool {
     let path = match path.canonicalize() {
         Ok(path) => path,
         Err(_) => return false,
@@ -80,48 +58,31 @@ fn test_path(config: &Config, path: &Path) -> bool {
     true
 }
 
-fn list_folder(
+fn walk_dir<F: FnMut(PathBuf) -> Fallible<Option<PathBuf>>>(
     config: &Config,
     srv_ip: &str,
     dev_id: &str,
-    path: &Path,
-) -> Result<Vec<Entry>, Error> {
-    let output = run_util(
-        &config,
-        &[
-            OsStr::new("--auth-list"),
-            OsStr::new("--xml-output"),
-            &make_arg("--device-id=", dev_id),
-            &make_arg(&format!("{}@{}::home", config.username, srv_ip), path),
-        ],
-    )?;
+    dir: &Path,
+    mut f: F,
+) -> Fallible<()> {
+    let mut dirs = vec![dir.to_path_buf()];
 
-    #[derive(Deserialize)]
-    #[serde(rename = "item")]
-    struct Resource {
-        #[serde(rename = "restype")]
-        type_: char,
-        #[serde(rename = "fname")]
-        name: PathBuf,
+    while let Some(dir) = dirs.pop() {
+        for (entry, is_dir) in list_dir(config, srv_ip, dev_id, &dir)? {
+            let path = dir.join(entry);
+
+            if let Some(path) = f(path)? {
+                if is_dir {
+                    dirs.push(path);
+                }
+            }
+        }
     }
 
-    let resources = parse_items::<Resource>(output)?;
-
-    Ok(resources
-        .into_iter()
-        .filter_map(|resource| match resource.type_ {
-            'D' => Some(Entry::Dir(resource.name)),
-            'F' => Some(Entry::File(resource.name)),
-            type_ => {
-                warn!("Skipping unknown resource type: {}", type_);
-
-                None
-            }
-        })
-        .collect())
+    Ok(())
 }
 
-fn delete_items<I, P>(config: &Config, srv_ip: &str, dev_id: &str, items: I) -> Result<(), Error>
+fn delete_items<I, P>(config: &Config, srv_ip: &str, dev_id: &str, items: I) -> Fallible<()>
 where
     I: IntoIterator<Item = P>,
     P: AsRef<Path>,
