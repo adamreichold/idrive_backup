@@ -7,7 +7,7 @@ edition = "2018"
 [dependencies]
 failure = "0.1"
 log = "0.4"
-simplelog = "0.5"
+simplelog = "0.7"
 chrono = "0.4"
 tempfile = "3.0"
 serde = "1.0"

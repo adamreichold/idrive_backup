@@ -15,7 +15,7 @@ use serde::de::DeserializeOwned;
 use serde_derive::Deserialize;
 use serde_xml_rs::from_str as from_xml_str;
 use serde_yaml::from_reader as from_yaml_reader;
-use simplelog::{Config as LogConfig, LevelFilter, SimpleLogger};
+use simplelog::{ConfigBuilder as LogConfigBuilder, LevelFilter, SimpleLogger};
 use tempfile::{NamedTempFile, TempDir};
 
 use self::backup::backup;
@@ -25,11 +25,10 @@ use self::restore::restore;
 fn main() -> Fallible<()> {
     SimpleLogger::init(
         LevelFilter::Info,
-        LogConfig {
-            time: None,
-            target: None,
-            ..Default::default()
-        },
+        LogConfigBuilder::new()
+            .set_time_level(LevelFilter::Off)
+            .set_target_level(LevelFilter::Off)
+            .build(),
     )
     .unwrap();
 
