@@ -21,15 +21,13 @@ use std::io::{BufWriter, Write};
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 
-use failure::Fallible;
-use log::info;
-use serde_derive::Deserialize;
+use serde::Deserialize;
 use tempfile::NamedTempFile;
 
-use super::{format_size, list_dir, make_arg, parse_items, run_util, Config};
+use super::{format_size, list_dir, make_arg, parse_items, run_util, Config, Fallible};
 
-pub fn restore(config: &Config, srv_ip: &str, dev_id: &str, dir: &Path) -> Fallible<()> {
-    info!(
+pub fn restore(config: &Config, srv_ip: &str, dev_id: &str, dir: &Path) -> Fallible {
+    eprintln!(
         "Restoring backup of {} ({}) from {}...",
         config.device_name, dev_id, srv_ip
     );
@@ -73,7 +71,7 @@ pub fn restore(config: &Config, srv_ip: &str, dev_id: &str, dir: &Path) -> Falli
 
     let (size, unit) = format_size(total_transfer_size);
 
-    info!("Transferred {:.1} {} during restore.", size, unit);
+    eprintln!("Transferred {:.1} {} during restore.", size, unit);
 
     Ok(())
 }

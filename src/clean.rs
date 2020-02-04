@@ -21,15 +21,13 @@ use std::io::{BufWriter, Write};
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 
-use failure::{bail, Fallible, ResultExt};
-use log::{info, warn};
-use serde_derive::Deserialize;
+use serde::Deserialize;
 use tempfile::NamedTempFile;
 
-use super::{list_dir, make_arg, parse_items, run_util, Config};
+use super::{context, list_dir, make_arg, parse_items, run_util, Config, Fallible};
 
-pub fn clean(config: &Config, srv_ip: &str, dev_id: &str) -> Fallible<()> {
-    info!(
+pub fn clean(config: &Config, srv_ip: &str, dev_id: &str) -> Fallible {
+    eprintln!(
         "Cleaning archive of {} ({}) at {}...",
         config.device_name, dev_id, srv_ip
     );
@@ -43,7 +41,8 @@ pub fn clean(config: &Config, srv_ip: &str, dev_id: &str) -> Fallible<()> {
             items.push(path);
 
             if items.len() == 100 {
-                delete_items(config, srv_ip, dev_id, &items).context("Failed to delete items")?;
+                delete_items(config, srv_ip, dev_id, &items)
+                    .map_err(context("Failed to delete items"))?;
 
                 items.clear()
             }
@@ -53,7 +52,7 @@ pub fn clean(config: &Config, srv_ip: &str, dev_id: &str) -> Fallible<()> {
     })?;
 
     if !items.is_empty() {
-        delete_items(config, srv_ip, dev_id, &items).context("Failed to delete items")?;
+        delete_items(config, srv_ip, dev_id, &items).map_err(context("Failed to delete items"))?;
     }
 
     Ok(())
@@ -82,7 +81,7 @@ fn walk_dir<F: FnMut(PathBuf) -> Fallible<Option<PathBuf>>>(
     dev_id: &str,
     dir: &Path,
     mut f: F,
-) -> Fallible<()> {
+) -> Fallible {
     let mut dirs = vec![dir.to_path_buf()];
 
     while let Some(dir) = dirs.pop() {
@@ -100,7 +99,7 @@ fn walk_dir<F: FnMut(PathBuf) -> Fallible<Option<PathBuf>>>(
     Ok(())
 }
 
-fn delete_items<I, P>(config: &Config, srv_ip: &str, dev_id: &str, items: I) -> Fallible<()>
+fn delete_items<I, P>(config: &Config, srv_ip: &str, dev_id: &str, items: I) -> Fallible
 where
     I: IntoIterator<Item = P>,
     P: AsRef<Path>,
@@ -112,7 +111,7 @@ where
         let mut list_file = BufWriter::new(list_file.as_file());
 
         for item in items {
-            warn!("Deleting item {} from archive", item.as_ref().display());
+            eprintln!("Deleting item {} from archive", item.as_ref().display());
 
             list_file.write_all(item.as_ref().as_os_str().as_bytes())?;
             list_file.write_all(b"\n")?;
@@ -147,10 +146,10 @@ where
             if items_deleted == item_cnt {
                 return Ok(());
             } else {
-                bail!("Deleted only {} of {} items", items_deleted, item_cnt);
+                return Err(format!("Deleted only {} of {} items", items_deleted, item_cnt).into());
             }
         }
     }
 
-    bail!("Deletion of {} items was not confirmed", item_cnt);
+    Err(format!("Deletion of {} items was not confirmed", item_cnt).into())
 }

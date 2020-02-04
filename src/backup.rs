@@ -23,15 +23,16 @@ use std::path::Path;
 use std::process::{Command, Stdio};
 
 use chrono::{offset::Local, DateTime};
-use failure::{Fallible, ResultExt};
-use log::{error, info, warn};
-use serde_derive::Deserialize;
+use serde::Deserialize;
 use tempfile::NamedTempFile;
 
-use super::{format_size, get_hostname, get_quota, make_arg, parse_items, run_util, Config};
+use super::{
+    context, format_size, get_hostname, get_quota, make_arg, parse_items, run_util, Config,
+    Fallible,
+};
 
-pub fn backup(config: &Config, srv_ip: &str, dev_id: &str) -> Fallible<()> {
-    info!(
+pub fn backup(config: &Config, srv_ip: &str, dev_id: &str) -> Fallible {
+    eprintln!(
         "Starting backup from {} to {} ({}) at {}...",
         get_hostname()?,
         config.device_name,
@@ -49,7 +50,7 @@ pub fn backup(config: &Config, srv_ip: &str, dev_id: &str) -> Fallible<()> {
         let path = match path.canonicalize() {
             Ok(path) => path,
             Err(err) => {
-                warn!(
+                eprintln!(
                     "Skipping path {} as it appears to be a broken symbolic link: {}",
                     path.display(),
                     err
@@ -63,7 +64,7 @@ pub fn backup(config: &Config, srv_ip: &str, dev_id: &str) -> Fallible<()> {
             .iter()
             .find(|exclude| path.starts_with(exclude))
         {
-            info!(
+            eprintln!(
                 "Skipping path {} due to exclude {}",
                 path.display(),
                 exclude.display(),
@@ -76,7 +77,7 @@ pub fn backup(config: &Config, srv_ip: &str, dev_id: &str) -> Fallible<()> {
 
             if files.len() == 1000 {
                 upload_files(config, srv_ip, dev_id, &mut stats, &files)
-                    .context("Failed to upload files")?;
+                    .map_err(context("Failed to upload files"))?;
 
                 files.clear();
             }
@@ -84,7 +85,7 @@ pub fn backup(config: &Config, srv_ip: &str, dev_id: &str) -> Fallible<()> {
             let dir = match path.read_dir() {
                 Ok(dir) => dir,
                 Err(err) => {
-                    warn!(
+                    eprintln!(
                         "Skipping directory {} as it appears to have been removed: {}",
                         path.display(),
                         err
@@ -97,7 +98,7 @@ pub fn backup(config: &Config, srv_ip: &str, dev_id: &str) -> Fallible<()> {
                 let entry = match entry {
                     Ok(entry) => entry,
                     Err(err) => {
-                        warn!(
+                        eprintln!(
                             "Skipping entry in directory {} as it appears to have been removed: {}",
                             path.display(),
                             err
@@ -109,7 +110,7 @@ pub fn backup(config: &Config, srv_ip: &str, dev_id: &str) -> Fallible<()> {
                 paths.push(entry.path());
             }
         } else {
-            warn!(
+            eprintln!(
                 "Skipping path {} as it is neither a file nor a directory",
                 path.display()
             );
@@ -119,22 +120,22 @@ pub fn backup(config: &Config, srv_ip: &str, dev_id: &str) -> Fallible<()> {
 
     if !files.is_empty() {
         upload_files(config, srv_ip, dev_id, &mut stats, &files)
-            .context("Failed to upload files")?;
+            .map_err(context("Failed to upload files"))?;
     }
 
     let endtime = Local::now();
 
     if stats.failed_to_backup != 0 {
-        error!(
+        eprintln!(
             "Failed to backup {} out of {} files",
             stats.failed_to_backup, stats.considered_for_backup
         );
     } else {
-        info!("Finished backup of {} files", stats.considered_for_backup);
+        eprintln!("Finished backup of {} files", stats.considered_for_backup);
     }
 
     mail_summary(&config, &srv_ip, &starttime, &endtime, &stats)
-        .context("Failed to mail summary")?;
+        .map_err(context("Failed to mail summary"))?;
 
     Ok(())
 }
@@ -153,7 +154,7 @@ fn upload_files<I, P>(
     dev_id: &str,
     stats: &mut Stats,
     files: I,
-) -> Fallible<()>
+) -> Fallible
 where
     I: IntoIterator<Item = P>,
     P: AsRef<Path>,
@@ -172,7 +173,7 @@ where
         }
     }
 
-    info!("Uploading batch of {} files...", file_cnt);
+    eprintln!("Uploading batch of {} files...", file_cnt);
 
     let output = run_util(
         &config,
@@ -218,7 +219,7 @@ where
 
         if transfer.type_ == "FULL" || transfer.type_ == "INCREMENTAL" {
             let (size, unit) = format_size(transfer_size);
-            info!(
+            eprintln!(
                 "Transferred {:.1} {} at {} to backup file /{}",
                 size, unit, transfer.rate, transfer.file_name
             );
@@ -227,7 +228,7 @@ where
         } else if transfer.type_ == "FILE IN SYNC" {
             stats.already_present += 1
         } else {
-            error!(
+            eprintln!(
                 "Failed to backup file {} due to: {}",
                 transfer.file_name, transfer.type_
             );
@@ -245,8 +246,9 @@ fn mail_summary(
     starttime: &DateTime<Local>,
     endtime: &DateTime<Local>,
     stats: &Stats,
-) -> Fallible<()> {
-    let (quota_used, quota_total) = get_quota(config, srv_ip).context("Failed to get quota")?;
+) -> Fallible {
+    let (quota_used, quota_total) =
+        get_quota(config, srv_ip).map_err(context("Failed to get quota"))?;
 
     let summary = format!(
         r#"
@@ -297,7 +299,7 @@ Quota used: {quota_used} GB out of {quota_total} GB"#,
         .status()?;
 
     if !status.success() {
-        warn!("Could not send summary via electronic mail using curl");
+        eprintln!("Could not send summary via electronic mail using curl");
     }
 
     Ok(())

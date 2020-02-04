@@ -21,40 +21,35 @@ mod clean;
 mod restore;
 
 use std::env::args;
+use std::error::Error;
 use std::ffi::{OsStr, OsString};
 use std::fs::{remove_file, set_permissions, write, File, Permissions};
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use failure::{bail, Fallible, ResultExt, SyncFailure};
-use log::warn;
-use serde::de::DeserializeOwned;
-use serde_derive::Deserialize;
+use serde::{de::DeserializeOwned, Deserialize};
 use serde_xml_rs::from_str as from_xml_str;
 use serde_yaml::from_reader as from_yaml_reader;
-use simplelog::{ConfigBuilder as LogConfigBuilder, LevelFilter, SimpleLogger};
 use tempfile::{NamedTempFile, TempDir};
 
 use self::backup::backup;
 use self::clean::clean;
 use self::restore::restore;
 
-fn main() -> Fallible<()> {
-    SimpleLogger::init(
-        LevelFilter::Info,
-        LogConfigBuilder::new()
-            .set_time_level(LevelFilter::Off)
-            .set_target_level(LevelFilter::Off)
-            .build(),
-    )
-    .unwrap();
+type Fallible<T = ()> = Result<T, Box<dyn Error>>;
 
-    download_util().context("Failed to download idevsutil_dedup")?;
+fn context(msg: &'static str) -> impl FnOnce(Box<dyn Error>) -> Box<dyn Error> {
+    move |err| format!("{}: {}", msg, err).into()
+}
 
-    let config = read_config().context("Failed to read config")?;
-    let srv_ip = get_server_ip(&config).context("Failed to determine server IP")?;
-    let dev_id = get_device_id(&config, &srv_ip).context("Failed to determine device ID")?;
+fn main() -> Fallible {
+    download_util().map_err(context("Failed to download idevsutil_dedup"))?;
+
+    let config = read_config().map_err(context("Failed to read config"))?;
+    let srv_ip = get_server_ip(&config).map_err(context("Failed to determine server IP"))?;
+    let dev_id =
+        get_device_id(&config, &srv_ip).map_err(context("Failed to determine device ID"))?;
 
     let args = args().collect::<Vec<_>>();
 
@@ -66,7 +61,7 @@ fn main() -> Fallible<()> {
             restore(&config, &srv_ip, &dev_id, dir)
         }
         Some("clean") => clean(&config, &srv_ip, &dev_id),
-        Some(arg) => bail!("Unsupported mode: {}", arg),
+        Some(arg) => Err(format!("Unsupported mode: {}", arg).into()),
     }
 }
 
@@ -88,12 +83,12 @@ fn read_config() -> Fallible<Config> {
     Ok(config)
 }
 
-fn download_util() -> Fallible<()> {
+fn download_util() -> Fallible {
     if Path::new("idevsutil_dedup").exists() {
         return Ok(());
     }
 
-    warn!("Downloading idevsutil_dedup...");
+    eprintln!("Downloading idevsutil_dedup...");
 
     let status = Command::new("curl")
         .arg("-o")
@@ -102,7 +97,7 @@ fn download_util() -> Fallible<()> {
         .status()?;
 
     if !status.success() {
-        bail!("Failed to download idevsutil_dedup using curl");
+        return Err("Failed to download idevsutil_dedup using curl".into());
     }
 
     let status = Command::new("unzip")
@@ -112,7 +107,7 @@ fn download_util() -> Fallible<()> {
         .status()?;
 
     if !status.success() {
-        bail!("Failed to extract idevsutil_dedup using unzip");
+        return Err("Failed to extract idevsutil_dedup using unzip".into());
     }
 
     remove_file("IDrive_linux_64bit.zip")?;
@@ -143,10 +138,7 @@ where
         .output()?;
 
     if !output.status.success() {
-        match output.status.code() {
-            Some(code) => bail!("idevsutil_dedup failed with exit code {}", code),
-            None => bail!("idevsutil_dedup was terminated by signal"),
-        }
+        return Err(format!("idevsutil_dedup failed with status {:?}", output.status).into());
     }
 
     Ok(String::from_utf8(output.stdout)?)
@@ -156,10 +148,10 @@ fn parse_tree<T: DeserializeOwned>(output: String) -> Fallible<T> {
     let tree = if let Some(pos) = output.find("<tree") {
         &output[pos..]
     } else {
-        bail!("Did not find expected tree in output");
+        return Err("Did not find expected tree in output".into());
     };
 
-    Ok(from_xml_str(tree).map_err(SyncFailure::new)?)
+    from_xml_str(tree).map_err(Into::into)
 }
 
 fn parse_items<T: DeserializeOwned>(output: String) -> Fallible<Vec<T>> {
@@ -167,7 +159,7 @@ fn parse_items<T: DeserializeOwned>(output: String) -> Fallible<Vec<T>> {
 
     for line in output.lines() {
         if line.starts_with("<item") {
-            items.push(from_xml_str(&line).map_err(SyncFailure::new)?);
+            items.push(from_xml_str(&line)?);
         }
     }
 
@@ -213,7 +205,7 @@ fn get_device_id(config: &Config, srv_ip: &str) -> Fallible<String> {
         }
     }
 
-    bail!("Failed to resolve device ID");
+    Err("Failed to resolve device ID".into())
 }
 
 fn get_quota(config: &Config, srv_ip: &str) -> Fallible<(u64, u64)> {
@@ -272,7 +264,7 @@ fn list_dir(
             'D' => Some((resource.name, true)),
             'F' => Some((resource.name, false)),
             type_ => {
-                warn!("Skipping unknown resource type: {}", type_);
+                eprintln!("Skipping unknown resource type: {}", type_);
 
                 None
             }
