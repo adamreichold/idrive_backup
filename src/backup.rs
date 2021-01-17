@@ -294,7 +294,7 @@ Quota used: {quota_used} GB out of {quota_total} GB"#,
         .arg(&format!("content={}", summary))
         .arg("--data-urlencode")
         .arg(&format!("subject={}", subject))
-        .arg("https://webdav.ibackup.com/cgi-bin/Notify_email_ibl")
+        .arg("http://webdav.ibackup.com/cgi-bin/Notify_email_ibl")
         .stdout(Stdio::null())
         .status()?;
 

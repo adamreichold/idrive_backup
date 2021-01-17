@@ -28,8 +28,8 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use quick_xml::de::from_str as from_xml_str;
 use serde::{de::DeserializeOwned, Deserialize};
-use serde_xml_rs::from_str as from_xml_str;
 use serde_yaml::from_reader as from_yaml_reader;
 use tempfile::{NamedTempFile, TempDir};
 
