@@ -74,6 +74,12 @@ pub struct Config {
     notify_email: String,
     includes: Vec<PathBuf>,
     excludes: Vec<PathBuf>,
+    #[serde(default = "default_batch_size")]
+    batch_size: usize,
+}
+
+fn default_batch_size() -> usize {
+    1000
 }
 
 fn read_config() -> Fallible<Config> {
@@ -171,12 +177,12 @@ fn get_server_ip(config: &Config) -> Fallible<String> {
 
     #[derive(Deserialize)]
     #[serde(rename = "tree")]
-    struct ServerIP {
+    struct ServerIp {
         #[serde(rename = "cmdUtilityServerIP")]
         val: String,
     }
 
-    let srv_ip = parse_tree::<ServerIP>(output)?;
+    let srv_ip = parse_tree::<ServerIp>(output)?;
 
     Ok(srv_ip.val)
 }

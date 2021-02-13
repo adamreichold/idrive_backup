@@ -10,7 +10,7 @@ chrono = { version = "0.4", default-features = false, features = ["clock"] }
 tempfile = "3.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.8"
-quick-xml = { version = "0.20", features = ["serialize"] }
+quick-xml = { version = "0.21", features = ["serialize"] }
 
 [profile.release]
 opt-level = "s"

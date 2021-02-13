@@ -75,7 +75,7 @@ pub fn backup(config: &Config, srv_ip: &str, dev_id: &str) -> Fallible {
         if path.is_file() {
             files.push(path);
 
-            if files.len() == 1000 {
+            if files.len() == config.batch_size {
                 upload_files(config, srv_ip, dev_id, &mut stats, &files)
                     .map_err(context("Failed to upload files"))?;
 
