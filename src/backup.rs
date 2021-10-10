@@ -134,7 +134,7 @@ pub fn backup(config: &Config, srv_ip: &str, dev_id: &str) -> Fallible {
         eprintln!("Finished backup of {} files", stats.considered_for_backup);
     }
 
-    mail_summary(&config, &srv_ip, &starttime, &endtime, &stats)
+    mail_summary(config, srv_ip, &starttime, &endtime, &stats)
         .map_err(context("Failed to mail summary"))?;
 
     Ok(())
@@ -176,7 +176,7 @@ where
     eprintln!("Uploading batch of {} files...", file_cnt);
 
     let output = run_util(
-        &config,
+        config,
         &[
             OsStr::new("--xml-output"),
             OsStr::new("--type"),

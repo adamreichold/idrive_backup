@@ -121,7 +121,7 @@ where
     }
 
     let output = run_util(
-        &config,
+        config,
         &[
             OsStr::new("--delete-items"),
             OsStr::new("--xml-output"),

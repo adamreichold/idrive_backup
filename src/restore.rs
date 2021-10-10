@@ -44,7 +44,7 @@ pub fn restore(config: &Config, srv_ip: &str, dev_id: &str, dir: &Path) -> Falli
     }
 
     let output = run_util(
-        &config,
+        config,
         &[
             OsStr::new("--xml-output"),
             &make_arg("--files-from=", list_file.path()),

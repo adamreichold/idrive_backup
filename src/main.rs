@@ -165,7 +165,7 @@ fn parse_items<T: DeserializeOwned>(output: String) -> Fallible<Vec<T>> {
 
     for line in output.lines() {
         if line.starts_with("<item") {
-            items.push(from_xml_str(&line)?);
+            items.push(from_xml_str(line)?);
         }
     }
 
@@ -173,7 +173,7 @@ fn parse_items<T: DeserializeOwned>(output: String) -> Fallible<Vec<T>> {
 }
 
 fn get_server_ip(config: &Config) -> Fallible<String> {
-    let output = run_util(&config, &["--getServerAddress", &config.username])?;
+    let output = run_util(config, &["--getServerAddress", &config.username])?;
 
     #[derive(Deserialize)]
     #[serde(rename = "tree")]
@@ -189,7 +189,7 @@ fn get_server_ip(config: &Config) -> Fallible<String> {
 
 fn get_device_id(config: &Config, srv_ip: &str) -> Fallible<String> {
     let output = run_util(
-        &config,
+        config,
         &[
             "--list-device",
             &format!("{}@{}::home/", config.username, srv_ip),
@@ -216,7 +216,7 @@ fn get_device_id(config: &Config, srv_ip: &str) -> Fallible<String> {
 
 fn get_quota(config: &Config, srv_ip: &str) -> Fallible<(u64, u64)> {
     let output = run_util(
-        &config,
+        config,
         &[
             "--get-quota",
             &format!("{}@{}::home/", config.username, srv_ip),
@@ -244,7 +244,7 @@ fn list_dir(
     dir: &Path,
 ) -> Fallible<impl Iterator<Item = (PathBuf, bool)>> {
     let output = run_util(
-        &config,
+        config,
         &[
             OsStr::new("--auth-list"),
             OsStr::new("--xml-output"),
