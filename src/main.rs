@@ -19,6 +19,7 @@ along with b2_backup.  If not, see <https://www.gnu.org/licenses/>.
 mod backup;
 mod clean;
 mod restore;
+mod restore_missing;
 
 use std::env::args;
 use std::error::Error;
@@ -36,6 +37,7 @@ use tempfile::{NamedTempFile, TempDir};
 use self::backup::backup;
 use self::clean::clean;
 use self::restore::restore;
+use self::restore_missing::restore_missing;
 
 type Fallible<T = ()> = Result<T, Box<dyn Error>>;
 
@@ -56,11 +58,18 @@ fn main() -> Fallible {
     match args.get(1).map(String::as_str) {
         None | Some("backup") => backup(&config, &srv_ip, &dev_id),
         Some("restore") => {
-            let dir = Path::new(args.get(2).map(String::as_str).unwrap_or("restored_files"));
+            let sub_dir = Path::new(args.get(2).ok_or("Missing subdirectory")?);
+            let out_dir = Path::new(args.get(3).map(String::as_str).unwrap_or("restored_files"));
 
-            restore(&config, &srv_ip, &dev_id, dir)
+            restore(&config, &srv_ip, &dev_id, sub_dir, out_dir)
         }
         Some("clean") => clean(&config, &srv_ip, &dev_id),
+        Some("restore_missing") => {
+            let sub_dir = Path::new(args.get(2).ok_or("Missing subdirectory")?);
+            let out_dir = Path::new(args.get(3).map(String::as_str).unwrap_or("restored_files"));
+
+            restore_missing(&config, &srv_ip, &dev_id, sub_dir, out_dir)
+        }
         Some(arg) => Err(format!("Unsupported mode: {}", arg).into()),
     }
 }
@@ -275,6 +284,30 @@ fn list_dir(
                 None
             }
         }))
+}
+
+fn walk_dir<F: FnMut(PathBuf) -> Fallible<Option<PathBuf>>>(
+    config: &Config,
+    srv_ip: &str,
+    dev_id: &str,
+    dir: &Path,
+    mut f: F,
+) -> Fallible {
+    let mut dirs = vec![dir.to_path_buf()];
+
+    while let Some(dir) = dirs.pop() {
+        for (entry, is_dir) in list_dir(config, srv_ip, dev_id, &dir)? {
+            let path = dir.join(entry);
+
+            if let Some(path) = f(path)? {
+                if is_dir {
+                    dirs.push(path);
+                }
+            }
+        }
+    }
+
+    Ok(())
 }
 
 fn make_arg<S: AsRef<OsStr>>(pre: &str, val: S) -> OsString {

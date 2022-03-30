@@ -24,104 +24,94 @@ use std::path::{Path, PathBuf};
 use serde::Deserialize;
 use tempfile::NamedTempFile;
 
-use super::{context, make_arg, parse_items, run_util, walk_dir, Config, Fallible};
+use super::{context, format_size, make_arg, parse_items, run_util, walk_dir, Config, Fallible};
 
-pub fn clean(config: &Config, srv_ip: &str, dev_id: &str) -> Fallible {
+pub fn restore_missing(
+    config: &Config,
+    srv_ip: &str,
+    dev_id: &str,
+    sub_dir: &Path,
+    out_dir: &Path,
+) -> Fallible {
     eprintln!(
-        "Cleaning archive of {} ({}) at {}...",
+        "Restoring missing files from backup of {} ({}) from {}...",
         config.device_name, dev_id, srv_ip
     );
 
     let mut items = Vec::new();
 
-    walk_dir(config, srv_ip, dev_id, Path::new("/"), |path| {
-        if exists_and_not_excluded(config, &path) {
-            Ok(Some(path))
-        } else {
-            items.push(path);
+    walk_dir(config, srv_ip, dev_id, sub_dir, |path| {
+        if path.canonicalize().is_err() {
+            eprintln!("Restoring item {} from archive", path.display());
+
+            items.push(path.clone());
 
             if items.len() == 100 {
-                delete_items(config, srv_ip, dev_id, &items)
+                restore_items(config, srv_ip, dev_id, out_dir, &items)
                     .map_err(context("Failed to delete items"))?;
 
                 items.clear();
             }
-
-            Ok(None)
         }
+
+        Ok(Some(path))
     })?;
 
     if !items.is_empty() {
-        delete_items(config, srv_ip, dev_id, &items).map_err(context("Failed to delete items"))?;
+        restore_items(config, srv_ip, dev_id, out_dir, &items)
+            .map_err(context("Failed to delete items"))?;
     }
 
     Ok(())
 }
 
-fn exists_and_not_excluded(config: &Config, path: &Path) -> bool {
-    let path = match path.canonicalize() {
-        Ok(path) => path,
-        Err(_) => return false,
-    };
-
-    if config
-        .excludes
-        .iter()
-        .any(|exclude| path.starts_with(exclude))
-    {
-        return false;
-    }
-
-    true
-}
-
-fn delete_items(config: &Config, srv_ip: &str, dev_id: &str, items: &[PathBuf]) -> Fallible {
+fn restore_items(
+    config: &Config,
+    srv_ip: &str,
+    dev_id: &str,
+    dir: &Path,
+    items: &[PathBuf],
+) -> Fallible {
     let list_file = NamedTempFile::new()?;
-    let mut item_cnt = 0;
 
     {
         let mut list_file = BufWriter::new(list_file.as_file());
 
         for item in items {
-            eprintln!("Deleting item {} from archive", item.display());
-
             list_file.write_all(item.as_os_str().as_bytes())?;
             list_file.write_all(b"\n")?;
-
-            item_cnt += 1;
         }
     }
 
     let output = run_util(
         config,
         &[
-            OsStr::new("--delete-items"),
             OsStr::new("--xml-output"),
             &make_arg("--files-from=", list_file.path()),
-            OsStr::new("--relative"),
             &make_arg("--device-id=", dev_id),
             &OsString::from(format!("{}@{}::home/", config.username, srv_ip)),
+            dir.as_os_str(),
         ],
     )?;
 
     #[derive(Deserialize)]
     #[serde(rename = "item")]
-    struct Operation {
-        #[serde(rename = "tot_items_deleted")]
-        items_deleted: Option<usize>,
+    struct Transfer {
+        #[serde(rename = "tottrf_sz")]
+        total_size: u64,
     }
 
-    let operations = parse_items::<Operation>(output)?;
+    let transfers = parse_items::<Transfer>(output)?;
 
-    for operation in operations {
-        if let Some(items_deleted) = operation.items_deleted {
-            if items_deleted == item_cnt {
-                return Ok(());
-            } else {
-                return Err(format!("Deleted only {} of {} items", items_deleted, item_cnt).into());
-            }
-        }
-    }
+    let total_transfer_size = transfers
+        .iter()
+        .map(|transfer| transfer.total_size)
+        .max()
+        .unwrap_or(0);
 
-    Err(format!("Deletion of {} items was not confirmed", item_cnt).into())
+    let (size, unit) = format_size(total_transfer_size);
+
+    eprintln!("Transferred {:.1} {} during restore.", size, unit);
+
+    Ok(())
 }

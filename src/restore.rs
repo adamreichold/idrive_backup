@@ -26,7 +26,13 @@ use tempfile::NamedTempFile;
 
 use super::{format_size, list_dir, make_arg, parse_items, run_util, Config, Fallible};
 
-pub fn restore(config: &Config, srv_ip: &str, dev_id: &str, dir: &Path) -> Fallible {
+pub fn restore(
+    config: &Config,
+    srv_ip: &str,
+    dev_id: &str,
+    sub_dir: &Path,
+    out_dir: &Path,
+) -> Fallible {
     eprintln!(
         "Restoring backup of {} ({}) from {}...",
         config.device_name, dev_id, srv_ip
@@ -37,7 +43,7 @@ pub fn restore(config: &Config, srv_ip: &str, dev_id: &str, dir: &Path) -> Falli
     {
         let mut list_file = BufWriter::new(list_file.as_file());
 
-        for (entry, _) in list_dir(config, srv_ip, dev_id, Path::new("/"))? {
+        for (entry, _) in list_dir(config, srv_ip, dev_id, sub_dir)? {
             list_file.write_all(entry.as_os_str().as_bytes())?;
             list_file.write_all(b"\n")?;
         }
@@ -50,7 +56,7 @@ pub fn restore(config: &Config, srv_ip: &str, dev_id: &str, dir: &Path) -> Falli
             &make_arg("--files-from=", list_file.path()),
             &make_arg("--device-id=", dev_id),
             &OsString::from(format!("{}@{}::home/", config.username, srv_ip)),
-            dir.as_os_str(),
+            out_dir.as_os_str(),
         ],
     )?;
 
