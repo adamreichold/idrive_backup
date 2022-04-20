@@ -21,7 +21,6 @@ mod clean;
 mod restore;
 mod restore_missing;
 
-use std::env::args;
 use std::error::Error;
 use std::ffi::{OsStr, OsString};
 use std::fs::{remove_file, set_permissions, write, File, Permissions};
@@ -29,6 +28,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use clap::{command, Arg, Command as Subcommand};
 use quick_xml::de::from_str as from_xml_str;
 use serde::{de::DeserializeOwned, Deserialize};
 use serde_yaml::from_reader as from_yaml_reader;
@@ -39,13 +39,18 @@ use self::clean::clean;
 use self::restore::restore;
 use self::restore_missing::restore_missing;
 
-type Fallible<T = ()> = Result<T, Box<dyn Error>>;
-
-fn context(msg: &'static str) -> impl FnOnce(Box<dyn Error>) -> Box<dyn Error> {
-    move |err| format!("{}: {}", msg, err).into()
-}
-
 fn main() -> Fallible {
+    let matches = command!()
+        .subcommand(Subcommand::new("backup"))
+        .subcommand(
+            Subcommand::new("restore")
+                .arg(Arg::new("sub_dir").long("sub-dir").default_value("/"))
+                .arg(Arg::new("out_dir").long("out-dir"))
+                .arg(Arg::new("missing").long("missing")),
+        )
+        .subcommand(Subcommand::new("clean").arg(Arg::new("dry_run").long("dry-run")))
+        .get_matches();
+
     download_util().map_err(context("Failed to download idevsutil_dedup"))?;
 
     let config = read_config().map_err(context("Failed to read config"))?;
@@ -53,24 +58,25 @@ fn main() -> Fallible {
     let dev_id =
         get_device_id(&config, &srv_ip).map_err(context("Failed to determine device ID"))?;
 
-    let args = args().collect::<Vec<_>>();
+    match matches.subcommand() {
+        None | Some(("backup", _)) => backup(&config, &srv_ip, &dev_id),
+        Some(("restore", matches)) => {
+            let sub_dir = Path::new(matches.value_of("sub_dir").unwrap());
+            let out_dir = Path::new(matches.value_of("out_dir").unwrap());
+            let missing = matches.is_present("missing");
 
-    match args.get(1).map(String::as_str) {
-        None | Some("backup") => backup(&config, &srv_ip, &dev_id),
-        Some("restore") => {
-            let sub_dir = Path::new(args.get(2).ok_or("Missing subdirectory")?);
-            let out_dir = Path::new(args.get(3).map(String::as_str).unwrap_or("restored_files"));
-
-            restore(&config, &srv_ip, &dev_id, sub_dir, out_dir)
+            if missing {
+                restore_missing(&config, &srv_ip, &dev_id, sub_dir, out_dir)
+            } else {
+                restore(&config, &srv_ip, &dev_id, sub_dir, out_dir)
+            }
         }
-        Some("clean") => clean(&config, &srv_ip, &dev_id),
-        Some("restore_missing") => {
-            let sub_dir = Path::new(args.get(2).ok_or("Missing subdirectory")?);
-            let out_dir = Path::new(args.get(3).map(String::as_str).unwrap_or("restored_files"));
+        Some(("clean", matches)) => {
+            let dry_run = matches.is_present("dry_run");
 
-            restore_missing(&config, &srv_ip, &dev_id, sub_dir, out_dir)
+            clean(&config, &srv_ip, &dev_id, dry_run)
         }
-        Some(arg) => Err(format!("Unsupported mode: {}", arg).into()),
+        _ => unreachable!(),
     }
 }
 
@@ -344,4 +350,10 @@ fn format_size(size: u64) -> (f64, &'static str) {
     }
 
     (size, unit)
+}
+
+type Fallible<T = ()> = Result<T, Box<dyn Error>>;
+
+fn context(msg: &'static str) -> impl FnOnce(Box<dyn Error>) -> Box<dyn Error> {
+    move |err| format!("{}: {}", msg, err).into()
 }

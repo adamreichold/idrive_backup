@@ -26,7 +26,7 @@ use tempfile::NamedTempFile;
 
 use super::{context, make_arg, parse_items, run_util, walk_dir, Config, Fallible};
 
-pub fn clean(config: &Config, srv_ip: &str, dev_id: &str) -> Fallible {
+pub fn clean(config: &Config, srv_ip: &str, dev_id: &str, dry_run: bool) -> Fallible {
     eprintln!(
         "Cleaning archive of {} ({}) at {}...",
         config.device_name, dev_id, srv_ip
@@ -41,7 +41,7 @@ pub fn clean(config: &Config, srv_ip: &str, dev_id: &str) -> Fallible {
             items.push(path);
 
             if items.len() == 100 {
-                delete_items(config, srv_ip, dev_id, &items)
+                delete_items(config, srv_ip, dev_id, dry_run, &items)
                     .map_err(context("Failed to delete items"))?;
 
                 items.clear();
@@ -52,7 +52,8 @@ pub fn clean(config: &Config, srv_ip: &str, dev_id: &str) -> Fallible {
     })?;
 
     if !items.is_empty() {
-        delete_items(config, srv_ip, dev_id, &items).map_err(context("Failed to delete items"))?;
+        delete_items(config, srv_ip, dev_id, dry_run, &items)
+            .map_err(context("Failed to delete items"))?;
     }
 
     Ok(())
@@ -75,7 +76,21 @@ fn exists_and_not_excluded(config: &Config, path: &Path) -> bool {
     true
 }
 
-fn delete_items(config: &Config, srv_ip: &str, dev_id: &str, items: &[PathBuf]) -> Fallible {
+fn delete_items(
+    config: &Config,
+    srv_ip: &str,
+    dev_id: &str,
+    dry_run: bool,
+    items: &[PathBuf],
+) -> Fallible {
+    for item in items {
+        eprintln!("Deleting item {} from archive", item.display());
+    }
+
+    if dry_run {
+        return Ok(());
+    }
+
     let list_file = NamedTempFile::new()?;
     let mut item_cnt = 0;
 
@@ -83,8 +98,6 @@ fn delete_items(config: &Config, srv_ip: &str, dev_id: &str, items: &[PathBuf]) 
         let mut list_file = BufWriter::new(list_file.as_file());
 
         for item in items {
-            eprintln!("Deleting item {} from archive", item.display());
-
             list_file.write_all(item.as_os_str().as_bytes())?;
             list_file.write_all(b"\n")?;
 
