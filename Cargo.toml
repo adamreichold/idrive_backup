@@ -10,8 +10,8 @@ chrono = { version = "0.4", default-features = false, features = ["clock"] }
 clap = { version = "3.1", default-features = false, features = ["std", "cargo"] }
 tempfile = "3.0"
 serde = { version = "1.0", features = ["derive"] }
-serde_yaml = "0.8"
-quick-xml = { version = "0.22", features = ["serialize"] }
+serde_yaml = "0.9"
+quick-xml = { version = "0.23", features = ["serialize"] }
 
 [profile.release]
 opt-level = "s"
