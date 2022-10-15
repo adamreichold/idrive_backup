@@ -85,7 +85,7 @@ fn restore_items(
 
     let output = run_util(
         config,
-        &[
+        [
             OsStr::new("--xml-output"),
             &make_arg("--files-from=", list_file.path()),
             &make_arg("--device-id=", dev_id),

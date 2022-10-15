@@ -107,7 +107,7 @@ fn delete_items(
 
     let output = run_util(
         config,
-        &[
+        [
             OsStr::new("--delete-items"),
             OsStr::new("--xml-output"),
             &make_arg("--files-from=", list_file.path()),

@@ -177,7 +177,7 @@ where
 
     let output = run_util(
         config,
-        &[
+        [
             OsStr::new("--xml-output"),
             OsStr::new("--type"),
             &make_arg("--device-id=", dev_id),

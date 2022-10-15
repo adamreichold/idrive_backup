@@ -29,8 +29,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use clap::{command, Arg, Command as Subcommand};
-use quick_xml::de::from_str as from_xml_str;
 use serde::{de::DeserializeOwned, Deserialize};
+use serde_roxmltree::from_str as from_xml_str;
 use serde_yaml::from_reader as from_yaml_reader;
 use tempfile::{NamedTempFile, TempDir};
 
@@ -61,9 +61,9 @@ fn main() -> Fallible {
     match matches.subcommand() {
         None | Some(("backup", _)) => backup(&config, &srv_ip, &dev_id),
         Some(("restore", matches)) => {
-            let sub_dir = Path::new(matches.value_of("sub_dir").unwrap());
-            let out_dir = Path::new(matches.value_of("out_dir").unwrap());
-            let missing = matches.is_present("missing");
+            let sub_dir = matches.get_one::<PathBuf>("sub_dir").unwrap();
+            let out_dir = matches.get_one::<PathBuf>("out_dir").unwrap();
+            let missing = matches.get_flag("missing");
 
             if missing {
                 restore_missing(&config, &srv_ip, &dev_id, sub_dir, out_dir)
@@ -72,7 +72,7 @@ fn main() -> Fallible {
             }
         }
         Some(("clean", matches)) => {
-            let dry_run = matches.is_present("dry_run");
+            let dry_run = matches.get_flag("dry_run");
 
             clean(&config, &srv_ip, &dev_id, dry_run)
         }
@@ -155,7 +155,7 @@ where
         .arg(&make_arg("--pvt-key=", key_file.path()))
         .arg(&make_arg("--temp=", temp_dir.path()))
         .args(args)
-        .env("LC_ALL", "C")
+        .env("LANG", "C")
         .output()?;
 
     if !output.status.success() {
@@ -188,7 +188,7 @@ fn parse_items<T: DeserializeOwned>(output: String) -> Fallible<Vec<T>> {
 }
 
 fn get_server_ip(config: &Config) -> Fallible<String> {
-    let output = run_util(config, &["--getServerAddress", &config.username])?;
+    let output = run_util(config, ["--getServerAddress", &config.username])?;
 
     #[derive(Deserialize)]
     #[serde(rename = "tree")]
@@ -205,7 +205,7 @@ fn get_server_ip(config: &Config) -> Fallible<String> {
 fn get_device_id(config: &Config, srv_ip: &str) -> Fallible<String> {
     let output = run_util(
         config,
-        &[
+        [
             "--list-device",
             &format!("{}@{}::home/", config.username, srv_ip),
         ],
@@ -232,7 +232,7 @@ fn get_device_id(config: &Config, srv_ip: &str) -> Fallible<String> {
 fn get_quota(config: &Config, srv_ip: &str) -> Fallible<(u64, u64)> {
     let output = run_util(
         config,
-        &[
+        [
             "--get-quota",
             &format!("{}@{}::home/", config.username, srv_ip),
         ],
@@ -260,7 +260,7 @@ fn list_dir(
 ) -> Fallible<impl Iterator<Item = (PathBuf, bool)>> {
     let output = run_util(
         config,
-        &[
+        [
             OsStr::new("--auth-list"),
             OsStr::new("--xml-output"),
             &make_arg("--device-id=", dev_id),

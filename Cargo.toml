@@ -2,16 +2,15 @@
 name = "idrive_backup"
 version = "0.1.0"
 authors = ["Adam Reichold <adam.reichold@t-online.de>"]
-edition = "2018"
-resolver = "2"
+edition = "2021"
 
 [dependencies]
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
-clap = { version = "3.1", default-features = false, features = ["std", "cargo"] }
+clap = { version = "4.0", default-features = false, features = ["std", "help", "usage", "cargo"] }
 tempfile = "3.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.9"
-quick-xml = { version = "0.23", features = ["serialize"] }
+serde-roxmltree = "0.3"
 
 [profile.release]
 opt-level = "s"
