@@ -6,20 +6,14 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v3
       with:
         fetch-depth: 1
-    - uses: actions-rs/toolchain@v1
+    - uses: dtolnay/rust-toolchain@stable
       with:
-        profile: minimal
-        toolchain: stable
-        target: x86_64-unknown-linux-musl
+        targets: x86_64-unknown-linux-musl
     - run: sudo apt-get install --yes musl-tools
-
-    - uses: actions-rs/cargo@v1
-      with:
-        command: build
-        args: --release --target=x86_64-unknown-linux-musl
+    - run: cargo build  --release --target=x86_64-unknown-linux-musl
       env:
         RUSTFLAGS: "-Ctarget-feature=+crt-static"
 
