@@ -2,7 +2,10 @@
 Description=IDrive backup service
 
 [Service]
-ExecStart=schedtool -D -n19 -e ionice -c3 %h/bin/idrive_backup/idrive_backup
+ExecStart=%h/bin/idrive_backup/idrive_backup
 WorkingDirectory=%h/bin/idrive_backup
+Nice=19
+CPUSchedulingPolicy=idle
+IOSchedulingClass=idle
 Restart=on-failure
 RestartSec=300
