@@ -131,10 +131,10 @@ fn delete_items(
             if items_deleted == item_cnt {
                 return Ok(());
             } else {
-                return Err(format!("Deleted only {} of {} items", items_deleted, item_cnt).into());
+                return Err(format!("Deleted only {items_deleted} of {item_cnt} items").into());
             }
         }
     }
 
-    Err(format!("Deletion of {} items was not confirmed", item_cnt).into())
+    Err(format!("Deletion of {item_cnt} items was not confirmed").into())
 }

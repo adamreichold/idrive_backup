@@ -77,7 +77,7 @@ pub fn restore(
 
     let (size, unit) = format_size(total_transfer_size);
 
-    eprintln!("Transferred {:.1} {} during restore.", size, unit);
+    eprintln!("Transferred {size:.1} {unit} during restore.");
 
     Ok(())
 }

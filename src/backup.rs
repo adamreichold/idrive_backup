@@ -173,7 +173,7 @@ where
         }
     }
 
-    eprintln!("Uploading batch of {} files...", file_cnt);
+    eprintln!("Uploading batch of {file_cnt} files...");
 
     let output = run_util(
         config,
@@ -291,9 +291,9 @@ Quota used: {quota_used} GB out of {quota_total} GB"#,
         .arg("--data-urlencode")
         .arg(&format!("to_email={}", config.notify_email))
         .arg("--data-urlencode")
-        .arg(&format!("content={}", summary))
+        .arg(&format!("content={summary}"))
         .arg("--data-urlencode")
-        .arg(&format!("subject={}", subject))
+        .arg(&format!("subject={subject}"))
         .arg("http://webdav.ibackup.com/cgi-bin/Notify_email_ibl")
         .stdout(Stdio::null())
         .status()?;

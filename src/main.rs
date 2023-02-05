@@ -285,7 +285,7 @@ fn list_dir(
             'D' => Some((resource.name, true)),
             'F' => Some((resource.name, false)),
             type_ => {
-                eprintln!("Skipping unknown resource type: {}", type_);
+                eprintln!("Skipping unknown resource type: {type_}");
 
                 None
             }
@@ -355,5 +355,5 @@ fn format_size(size: u64) -> (f64, &'static str) {
 type Fallible<T = ()> = Result<T, Box<dyn Error>>;
 
 fn context(msg: &'static str) -> impl FnOnce(Box<dyn Error>) -> Box<dyn Error> {
-    move |err| format!("{}: {}", msg, err).into()
+    move |err| format!("{msg}: {err}").into()
 }
