@@ -28,7 +28,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use clap::{command, Arg, Command as Subcommand};
+use clap::{command, Arg, ArgAction, Command as Subcommand};
 use serde::{de::DeserializeOwned, Deserialize};
 use serde_roxmltree::from_str as from_xml_str;
 use serde_yaml::from_reader as from_yaml_reader;
@@ -46,9 +46,19 @@ fn main() -> Fallible {
             Subcommand::new("restore")
                 .arg(Arg::new("sub_dir").long("sub-dir").default_value("/"))
                 .arg(Arg::new("out_dir").long("out-dir"))
-                .arg(Arg::new("missing").long("missing")),
+                .arg(
+                    Arg::new("missing")
+                        .long("missing")
+                        .action(ArgAction::SetTrue),
+                ),
         )
-        .subcommand(Subcommand::new("clean").arg(Arg::new("dry_run").long("dry-run")))
+        .subcommand(
+            Subcommand::new("clean").arg(
+                Arg::new("dry_run")
+                    .long("dry-run")
+                    .action(ArgAction::SetTrue),
+            ),
+        )
         .get_matches();
 
     download_util().map_err(context("Failed to download idevsutil_dedup"))?;
