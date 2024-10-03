@@ -24,6 +24,7 @@ mod restore_missing;
 use std::error::Error;
 use std::ffi::{OsStr, OsString};
 use std::fs::{remove_file, set_permissions, write, File, Permissions};
+use std::io::BufReader;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -109,7 +110,7 @@ fn default_batch_size() -> usize {
 
 fn read_config() -> Fallible<Config> {
     let config_file = File::open("config.yaml")?;
-    let config = from_yaml_reader(config_file)?;
+    let config = from_yaml_reader(BufReader::new(config_file))?;
 
     Ok(config)
 }
@@ -161,9 +162,9 @@ where
     let temp_dir = TempDir::new()?;
 
     let output = Command::new("./idevsutil_dedup")
-        .arg(&make_arg("--password-file=", pass_file.path()))
-        .arg(&make_arg("--pvt-key=", key_file.path()))
-        .arg(&make_arg("--temp=", temp_dir.path()))
+        .arg(make_arg("--password-file=", pass_file.path()))
+        .arg(make_arg("--pvt-key=", key_file.path()))
+        .arg(make_arg("--temp=", temp_dir.path()))
         .args(args)
         .env("LANG", "C")
         .output()?;
@@ -239,27 +240,34 @@ fn get_device_id(config: &Config, srv_ip: &str) -> Fallible<String> {
     Err("Failed to resolve device ID".into())
 }
 
-fn get_quota(config: &Config, srv_ip: &str) -> Fallible<(u64, u64)> {
+fn get_quota(config: &Config, srv_ip: &str) -> Fallible<u64> {
     let output = run_util(
         config,
         [
-            "--get-quota",
+            "--calc-quota",
             &format!("{}@{}::home/", config.username, srv_ip),
         ],
     )?;
 
     #[derive(Deserialize)]
-    #[serde(rename = "tree")]
+    #[serde(rename = "item")]
     struct Quota {
-        #[serde(rename = "usedquota")]
-        used: u64,
-        #[serde(rename = "totalquota")]
-        total: u64,
+        quota_used: Option<String>,
     }
 
-    let quota = parse_tree::<Quota>(output)?;
+    let items = parse_items::<Quota>(output)?;
 
-    Ok((quota.used, quota.total))
+    for item in items {
+        if let Some(quota_used) = item.quota_used {
+            if let Some(quota_used) = quota_used.strip_suffix(" Bytes") {
+                let quota_used = quota_used.parse()?;
+
+                return Ok(quota_used);
+            }
+        }
+    }
+
+    Err("Failed to parse quota items".into())
 }
 
 fn list_dir(

@@ -247,8 +247,7 @@ fn mail_summary(
     endtime: &DateTime<Local>,
     stats: &Stats,
 ) -> Fallible {
-    let (quota_used, quota_total) =
-        get_quota(config, srv_ip).map_err(context("Failed to get quota"))?;
+    let quota_used = get_quota(config, srv_ip).map_err(context("Failed to get quota"))?;
 
     let summary = format!(
         r#"
@@ -260,7 +259,7 @@ Files considered for backup: {files_considered_for_backup}
 Files backed up now: {files_backed_up_now}
 Files already present in your account: {files_already_present}
 Files failed to backup: {files_failed_to_backup}
-Quota used: {quota_used} GB out of {quota_total} GB"#,
+Quota used: {quota_used} GB"#,
         device_name = config.device_name,
         hostname = get_hostname()?,
         starttime = starttime,
@@ -270,7 +269,6 @@ Quota used: {quota_used} GB out of {quota_total} GB"#,
         files_already_present = stats.already_present,
         files_failed_to_backup = stats.failed_to_backup,
         quota_used = quota_used >> 30,
-        quota_total = quota_total >> 30,
     );
 
     let subject = if stats.failed_to_backup != 0 {
@@ -285,15 +283,15 @@ Quota used: {quota_used} GB out of {quota_total} GB"#,
     let status = Command::new("curl")
         .arg("--silent")
         .arg("--data-urlencode")
-        .arg(&format!("username={}", config.username))
+        .arg(format!("username={}", config.username))
         .arg("--data-urlencode")
-        .arg(&format!("password={}", config.password))
+        .arg(format!("password={}", config.password))
         .arg("--data-urlencode")
-        .arg(&format!("to_email={}", config.notify_email))
+        .arg(format!("to_email={}", config.notify_email))
         .arg("--data-urlencode")
-        .arg(&format!("content={summary}"))
+        .arg(format!("content={summary}"))
         .arg("--data-urlencode")
-        .arg(&format!("subject={subject}"))
+        .arg(format!("subject={subject}"))
         .arg("http://webdav.ibackup.com/cgi-bin/Notify_email_ibl")
         .stdout(Stdio::null())
         .status()?;
