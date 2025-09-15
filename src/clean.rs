@@ -32,9 +32,16 @@ pub fn clean(config: &Config, srv_ip: &str, dev_id: &str, dry_run: bool) -> Fall
         config.device_name, dev_id, srv_ip
     );
 
+    let mut checked = 0;
     let mut items = Vec::new();
 
     walk_dir(config, srv_ip, dev_id, Path::new("/"), |path| {
+        checked += 1;
+
+        if checked % 1_000 == 0 {
+            println!("Checked {checked} paths...");
+        }
+
         if exists_and_not_excluded(config, &path) {
             Ok(Some(path))
         } else {
@@ -50,6 +57,8 @@ pub fn clean(config: &Config, srv_ip: &str, dev_id: &str, dry_run: bool) -> Fall
             Ok(None)
         }
     })?;
+
+    println!("Checked {checked} paths.");
 
     if !items.is_empty() {
         delete_items(config, srv_ip, dev_id, dry_run, &items)

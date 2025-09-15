@@ -23,9 +23,8 @@ mod restore_missing;
 
 use std::error::Error;
 use std::ffi::{OsStr, OsString};
-use std::fs::{remove_file, set_permissions, write, File, Permissions};
+use std::fs::{exists, write, File};
 use std::io::BufReader;
-use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -41,6 +40,10 @@ use self::restore::restore;
 use self::restore_missing::restore_missing;
 
 fn main() -> Fallible {
+    if !exists("idevsutil_dedup")? {
+        return Err("idevsutil_dedup is missing".into());
+    }
+
     let matches = command!()
         .subcommand(Subcommand::new("backup"))
         .subcommand(
@@ -61,8 +64,6 @@ fn main() -> Fallible {
             ),
         )
         .get_matches();
-
-    download_util().map_err(context("Failed to download idevsutil_dedup"))?;
 
     let config = read_config().map_err(context("Failed to read config"))?;
     let srv_ip = get_server_ip(&config).map_err(context("Failed to determine server IP"))?;
@@ -115,39 +116,6 @@ fn read_config() -> Fallible<Config> {
     Ok(config)
 }
 
-fn download_util() -> Fallible {
-    if Path::new("idevsutil_dedup").exists() {
-        return Ok(());
-    }
-
-    eprintln!("Downloading idevsutil_dedup...");
-
-    let status = Command::new("curl")
-        .arg("-o")
-        .arg("IDrive_linux_64bit.zip")
-        .arg("https://www.idrivedownloads.com/downloads/linux/download-options/IDrive_linux_64bit.zip")
-        .status()?;
-
-    if !status.success() {
-        return Err("Failed to download idevsutil_dedup using curl".into());
-    }
-
-    let status = Command::new("unzip")
-        .arg("-j")
-        .arg("IDrive_linux_64bit.zip")
-        .arg("IDrive_linux_64bit/idevsutil_dedup")
-        .status()?;
-
-    if !status.success() {
-        return Err("Failed to extract idevsutil_dedup using unzip".into());
-    }
-
-    remove_file("IDrive_linux_64bit.zip")?;
-    set_permissions("idevsutil_dedup", Permissions::from_mode(0o755))?;
-
-    Ok(())
-}
-
 fn run_util<I, S>(config: &Config, args: I) -> Fallible<String>
 where
     I: IntoIterator<Item = S>,
@@ -170,7 +138,12 @@ where
         .output()?;
 
     if !output.status.success() {
-        return Err(format!("idevsutil_dedup failed with status {:?}", output.status).into());
+        return Err(format!(
+            "idevsutil_dedup failed with status {:?}: {}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr)
+        )
+        .into());
     }
 
     Ok(String::from_utf8(output.stdout)?)
